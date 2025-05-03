@@ -1,7 +1,8 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, Query
 import requests
 import os
 from dotenv import load_dotenv
+from datetime import datetime, timedelta
 
 load_dotenv()
 
@@ -29,3 +30,30 @@ def post_message():
     response = requests.post("https://slack.com/api/chat.postMessage", json=message, headers=headers)
     result = response.json()
     return result
+
+@app.get("/slack/today_summary")
+def fetch_today_messages(channel_id: str):
+    now = datetime.now()
+    today_start = datetime(now.year, now.month, now.day)
+    oldest = today_start.timestamp()
+    latest = (today_start + timedelta(days=1)).timestamp()
+
+    headers = {
+        "Authorization": f"Bearer {SLACK_BOT_TOKEN}"
+    }
+    params = {
+        "channel": channel_id,
+        "oldest": oldest,
+        "latest": latest,
+        "limit": 1000
+    }
+
+    response = requests.get("https://slack.com/api/conversations.history", headers=headers, params=params)
+    data = response.json()
+
+    if not data.get("ok"):
+        return {"error": data.get("error", "Failed to fetch messages.")}
+
+    messages = data.get("messages", [])
+    result = [{"user": m.get("user", ""), "text": m.get("text", ""), "ts": m.get("ts", "")} for m in messages]
+    return {"count": len(result), "messages": result}
