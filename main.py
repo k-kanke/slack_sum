@@ -1,5 +1,5 @@
-from fastapi import FastAPI, Request
-import os
+from fastapi import FastAPI, Request, Header
+import os, hmac, hashlib, time
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -7,31 +7,38 @@ app = FastAPI()
 
 # エンドポイント作成
 @app.post("/slack/events")
-async def slack_events(request: Request):
+async def slack_events(request: Request, x_slack_signature: str = Header(...), x_slack_request_timestamp: str = Header(...)):
     body = await request.json()
 
+    # Slack署名検証
+    slack_signing_secret = os.environ["SLACK_SIGNING_SECRET"]
+    basestring = f"v0:{x_slack_request_timestamp}:{body.decode()}"
+    my_signature = "v0=" + hmac.new(slack_signing_secret.encode(), basestring.encode(), hashlib.sha256).hexdigest()
+    if not hmac.compare_digest(my_signature, x_slack_signature):
+        return {"error": "invalid signature"}
+    
+    # JSONとして解析
+    payload = await request.json()
+
     # Slackの初回URL検証
-    if body.get("type") == "url_verification":
+    if payload.get("type") == "url_verification":
         return {"challenge": body.get("challenge")}
 
-    # イベント処理
-    event = body.get("event", {})
-    if event.get("type") == "app_mention":
-        text = event.get("text", "")
-        channel = event.get("channel")
-        user = event.get("user")
+    # メンションイベント検知
+    if payload.get("event", {}).get("type") == "app_mention":
+        user = payload["event"].get("user")
+        channel = payload["event"].get("channel")
 
-        # 本日のメッセージ取得 → Difyで要約 → Slackに返信
+        # メッセージ取得・要約・投稿
         slack_token = os.environ["SLACK_BOT_TOKEN"]
-        channel_id = channel
         dify_key = os.environ["DIFY_API_KEY"]
         dify_app_id = os.environ["DIFY_APP_ID"]
 
-        messages = get_today_messages(slack_token, channel_id)
-        summary = summarize_with_dify(dify_key, dify_app_id, messages, user)
-        post_to_slack(slack_token, channel_id, f"<@{user}> さん、要約はこちら👇\n\n{summary}")
+        text = get_today_messages(slack_token, channel)
+        summary = summarize_with_dify(dify_key, dify_app_id, text)
+        post_to_slack(slack_token, channel, f"<@{user}> 要約です！\n{summary}")
 
-    return {"ok": True}
+    return {"status": "ok"}
 
 # 本番では使用しないが、デバッグ用に残す
 @app.get("/slack/summary")
