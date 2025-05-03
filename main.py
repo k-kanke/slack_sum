@@ -1,10 +1,39 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 import os
 from dotenv import load_dotenv
 
 load_dotenv()
 app = FastAPI()
 
+# エンドポイント作成
+@app.post("/slack/events")
+async def slack_events(request: Request):
+    body = await request.json()
+
+    # Slackの初回URL検証
+    if body.get("type") == "url_verification":
+        return {"challenge": body.get("challenge")}
+
+    # イベント処理
+    event = body.get("event", {})
+    if event.get("type") == "app_mention":
+        text = event.get("text", "")
+        channel = event.get("channel")
+        user = event.get("user")
+
+        # 本日のメッセージ取得 → Difyで要約 → Slackに返信
+        slack_token = os.environ["SLACK_BOT_TOKEN"]
+        channel_id = channel
+        dify_key = os.environ["DIFY_API_KEY"]
+        dify_app_id = os.environ["DIFY_APP_ID"]
+
+        messages = get_today_messages(slack_token, channel_id)
+        summary = summarize_with_dify(dify_key, dify_app_id, messages, user)
+        post_to_slack(slack_token, channel_id, f"<@{user}> さん、要約はこちら👇\n\n{summary}")
+
+    return {"ok": True}
+
+# 本番では使用しないが、デバッグ用に残す
 @app.get("/slack/summary")
 def generate_summary():
     slack_token = os.environ["SLACK_BOT_TOKEN"]
@@ -40,7 +69,7 @@ def get_today_messages(slack_token, channel_id):
 
 
 # Dify要約
-def summarize_with_dify(dify_api_key, app_id, text):
+def summarize_with_dify(dify_api_key, app_id, text, user):
     import requests, json
 
     headers = {
@@ -57,7 +86,7 @@ def summarize_with_dify(dify_api_key, app_id, text):
             "response_mode": "blocking",
             "conversation_id": None,
             "app_id": app_id,
-            "user": "k-kanke"
+            "user": user
         }
     )
 
