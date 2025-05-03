@@ -1,6 +1,13 @@
 from fastapi import FastAPI
-from typing import Optional
-from datetime import datetime
+import requests
+import os
+from dotenv import load_dotenv
+
+load_dotenv()
+
+
+SLACK_BOT_TOKEN = os.getenv("SLACK_BOT_TOKEN")
+SLACK_CHANNEL_ID = os.getenv("SLACK_CHANNEL_ID")
 
 app = FastAPI()
 
@@ -8,12 +15,17 @@ app = FastAPI()
 def root():
     return {"message": "Slack Summary API is running"}
 
-@app.get("/slack/today_summary")
-def fetch_summary(channel_id: Optional[str] = None):
-    #仮
-    today = datetime.now().strftime("%Y-%m-%d")
-    return {
-        "channel_id": channel_id,
-        "date": today,
-        "summary": "This is a placeholder summary for testing."
+@app.get("/post_message")
+def post_message():
+    message = {
+        "channel": SLACK_CHANNEL_ID,
+        "text": "✅ Slackからのテストメッセージ（FastAPIより送信）"
     }
+    headers = {
+        "Authorization": f"Bearer {SLACK_BOT_TOKEN}",
+        "Content-Type": "application/json"
+    }
+
+    response = requests.post("https://slack.com/api/chat.postMessage", json=message, headers=headers)
+    result = response.json()
+    return result
