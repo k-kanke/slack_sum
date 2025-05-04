@@ -128,7 +128,7 @@ def summarize_with_dify(dify_api_key, app_id, text, user):
         print("Dify Error: ", res.text)
         return f"要約失敗: {res.text}"
 
-# Slackに送信
+# 要約をSlackに送信
 def post_to_slack(slack_token, channel_id, summary_text):
     import requests
     headers = {"Authorization": f"Bearer {slack_token}"}
