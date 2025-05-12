@@ -65,7 +65,7 @@ async def mention_event(payload):
 
     return {"status": "ok"}
 
-# 本番では使用しないが、デバッグ用に残す
+# 後で消去（デバッグ用）
 @app.get("/slack/summary")
 def generate_summary():
     slack_token = os.environ["SLACK_BOT_TOKEN"]
